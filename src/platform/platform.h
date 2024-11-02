@@ -1,0 +1,110 @@
+/*  ----------------------------------- INFOS
+    This header file contains most of the basic calls to Windows API.
+    
+*/
+
+#ifndef _PLATFORMH_
+#define _PLATFORMH_
+
+#include <windows.h>
+
+// dependencies 
+
+#include "types.h"
+
+// structs
+
+struct viewport_size {
+    int width;
+    int height;
+};
+
+// functions
+
+static void FatalError(const char* message)
+{
+    MessageBoxA(NULL, message, "Error", MB_ICONEXCLAMATION);
+    ExitProcess(0);
+}
+
+static LRESULT CALLBACK WindowProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
+{
+    if(ImGui_ImplWin32_WndProcHandler(wnd, msg, wparam, lparam))
+    {
+        return true;
+    }
+    switch (msg)
+    {
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        return 0;
+    }
+    
+    return DefWindowProcW(wnd, msg, wparam, lparam);
+}
+
+ui32 platform_get_clock_speed() {
+	LARGE_INTEGER queryClock;
+	QueryPerformanceFrequency(&queryClock);
+	ui32 clockFrequency = SafeTruncateUInt64(queryClock.QuadPart);
+	return clockFrequency;
+};
+
+i64 platform_get_tick(){
+	LARGE_INTEGER ticks;
+    if (!QueryPerformanceCounter(&ticks))
+    {
+        FatalError("QueryPerformanceCounter failed!");
+    }
+    return ticks.QuadPart;
+}
+
+f64 platform_get_time(i32 clock){
+	i64 tick = platform_get_tick();
+	f64 time = tick / (f64)clock;
+    return time;
+}
+
+
+HWND platform_create_window(HINSTANCE instance, int width, int height) {
+    // register window class to have custom WindowProc callback
+    WNDCLASSEXW wc =
+    {
+        .cbSize = sizeof(wc),
+        .lpfnWndProc = WindowProc,
+        .hInstance = instance,
+        .hIcon = LoadIcon(NULL, IDI_APPLICATION),
+        .hCursor = LoadCursor(NULL, IDC_ARROW),
+        .lpszClassName = L"d3d11_window_class",
+    };
+    ATOM atom = RegisterClassExW(&wc);
+    Assert(atom && "Failed to register window class");
+
+    // window properties - width, height and style
+
+    // WS_EX_NOREDIRECTIONBITMAP flag here is needed to fix ugly bug with Windows 10
+    // when window is resized and DXGI swap chain uses FLIP presentation model
+    // DO NOT use it if you choose to use non-FLIP presentation model
+    // read about the bug here: https://stackoverflow.com/q/63096226 and here: https://stackoverflow.com/q/53000291
+    DWORD exstyle = WS_EX_APPWINDOW | WS_EX_NOREDIRECTIONBITMAP;
+    DWORD style = WS_OVERLAPPEDWINDOW;
+
+    // uncomment in case you want fixed size window
+    //style &= ~WS_THICKFRAME & ~WS_MAXIMIZEBOX;
+    //RECT rect = { 0, 0, 1280, 720 };
+    //AdjustWindowRectEx(&rect, style, FALSE, exstyle);
+    //width = rect.right - rect.left;
+    //height = rect.bottom - rect.top;
+
+    // create window
+    HWND window = CreateWindowExW(
+        exstyle, wc.lpszClassName, L"D3D11 Window", style,
+        CW_USEDEFAULT, CW_USEDEFAULT, width, height,
+        NULL, NULL, wc.hInstance, NULL);
+    Assert(window && "Failed to create window");
+	
+    return window;
+}
+
+
+#endif /* _PLATFORMH_ */
