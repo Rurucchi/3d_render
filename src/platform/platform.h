@@ -125,7 +125,7 @@ HWND platform_create_window(HINSTANCE instance, int width, int height) {
     return window;
 }
 
-viewport_size platform_getWindowSize(HWND window) {
+viewport_size platform_get_window_size(HWND window) {
 	/* doc:
 	https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getclientrect */
 	
