@@ -6,12 +6,6 @@
 #ifndef _PLATFORMH_
 #define _PLATFORMH_
 
-#include <windows.h>
-
-// dependencies 
-
-#include "types.h"
-
 // structs
 
 struct viewport_size {

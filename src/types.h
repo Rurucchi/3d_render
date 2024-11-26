@@ -11,6 +11,8 @@
     *(int *)0 = 0;                                                             \
 }
 
+#define AssertHR(hr) Assert(SUCCEEDED(hr))
+
 // standard types
 
 typedef unsigned int uint;

@@ -1,1 +1,5 @@
 build
+.vs
+/build
+/.vs
+vc140.pdb

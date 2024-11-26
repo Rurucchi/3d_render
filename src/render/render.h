@@ -10,8 +10,8 @@
 #pragma comment (lib, "d3d11")
 #pragma comment (lib, "d3dcompiler")
 
-#ifndef _DX11H_
-#define _DX11H_
+#ifndef _RENDERH_
+#define _RENDERH_
 
 #include <windows.h>
 #include <d3d11.h>
@@ -28,21 +28,7 @@ struct vertex
     f32 color[3];
 };
 
-struct quad_mesh {
-	i32 x;
-	i32 y;
-	i32 width;
-	i32 height;
-	// float orientation;
-};
-
-struct render_camera
-{
-    v2 position;
-    f32 ratio;
-    f32 scale; // height = scale, width = ratio * scale
-};
-
+// this will change depending on what we need
 struct render_context {
 	// basic device stuff
 	ID3D11Device* device;
@@ -69,6 +55,32 @@ struct render_context {
 	ID3D11SamplerState* sampler;
 };
 
+// camera
+struct camera
+{
+    v2 position;
+    f32 ratio;
+    f32 scale; // height = scale, width = ratio * scale
+};
+
+// camera projection
+mx game_OrthographicProjection(camera* game_camera, float width, float height)
+{
+    float L = game_camera->position.x - width / 2.f;
+    float R = game_camera->position.x + width / 2.f;
+    float T = game_camera->position.y + height / 2.f;
+    float B = game_camera->position.y - height / 2.f;
+    mx res = 
+    {
+        2.0f/(R-L),   0.0f,           0.0f,       0.0f,
+        0.0f,         2.0f/(T-B),     0.0f,       0.0f,
+        0.0f,         0.0f,           0.5f,       0.0f,
+        (R+L)/(L-R),  (T+B)/(B-T),    0.5f,       1.0f,
+    };
+    
+    return res;
+}
+
 // functions
 
 void render_init_ubuffer(render_context* rContext) {
@@ -84,7 +96,75 @@ void render_init_ubuffer(render_context* rContext) {
     rContext->device->CreateBuffer(&desc, NULL, &rContext->ubuffer); 
 };
 
-HRESULT render_init_d3d11(HWND window, render_context* rContext, game_camera* camera) {
+void render_create_dynamic_vbuffer(render_context *rContext, int bufferSize) {
+	D3D11_BUFFER_DESC desc =
+    {
+        .ByteWidth = sizeof(vertex) * bufferSize,
+		.Usage = D3D11_USAGE_DYNAMIC,
+		.BindFlags = D3D11_BIND_VERTEX_BUFFER,
+		.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE,
+	};
+
+	D3D11_SUBRESOURCE_DATA initial = { .pSysMem = rContext->vQueue };
+    rContext->device->CreateBuffer(&desc, NULL, &rContext->vbuffer);
+}
+
+void render_upload_camera_ubuffer(render_context *rContext, camera* game_camera, viewport_size vp){	
+	
+	float width = (float)vp.width;
+	float height = (float)vp.height;
+	
+	mx matrix = game_OrthographicProjection(game_camera, width, height);
+	
+	D3D11_MAPPED_SUBRESOURCE mapped;
+	
+	rContext->context->Map(rContext->ubuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+	memcpy(mapped.pData, &matrix, sizeof(matrix));
+	rContext->context->Unmap(rContext->ubuffer, 0);
+};
+
+void render_init_pipeline(render_context* rContext, viewport_size* vpSize){
+	
+
+	D3D11_VIEWPORT viewport =
+	{
+		.TopLeftX = 0,
+		.TopLeftY = 0,
+		.Width = (FLOAT)vpSize->width,
+		.Height = (FLOAT)vpSize->height,
+		.MinDepth = 0,
+		.MaxDepth = 1,
+	};
+
+	{
+		// Input Assembler
+		rContext->context->IASetInputLayout(rContext->layout);
+		rContext->context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		UINT stride = sizeof(struct vertex);
+		UINT offset = 0;
+		rContext->context->IASetVertexBuffers(0, 1, &rContext->vbuffer, &stride, &offset);
+
+		// Vertex Shader
+		rContext->context->VSSetConstantBuffers(0, 1, &rContext->ubuffer);
+		rContext->context->VSSetShader(rContext->vshader, NULL, 0);
+
+		// Rasterizer Stage
+		rContext->context->RSSetViewports(1, &viewport);
+		rContext->context->RSSetState(rContext->rasterizerState);
+
+		// Pixel Shader
+		rContext->context->PSSetSamplers(0, 1, &rContext->sampler);
+		rContext->context->PSSetShaderResources(0, 1, &rContext->textureView);
+		rContext->context->PSSetShader(rContext->pshader, NULL, 0);
+
+		// Output Merger
+		rContext->context->OMSetBlendState(rContext->blendState, NULL, ~0U);
+		rContext->context->OMSetDepthStencilState(rContext->depthState, 0);
+		rContext->context->OMSetRenderTargets(1, &rContext->rtView, rContext->dsView);
+	};
+};
+
+HRESULT render_init_d3d11(HWND window, render_context* rContext, camera* game_camera) {
 	/* doc:
 	https://learn.microsoft.com/en-us/windows/win32/api/d3d11/nf-d3d11-d3d11createdevice */
 	
@@ -94,10 +174,12 @@ HRESULT render_init_d3d11(HWND window, render_context* rContext, game_camera* ca
 	// create D3D11 device & context
     {
         UINT flags = 0;
-	#ifdef NDEBUG
+	#ifdef NDEBUG 
 		// this enables VERY USEFUL debug messages in debugger output
 		flags |= D3D11_CREATE_DEVICE_DEBUG;
-	#endif
+	#endif 
+	
+	
         D3D_FEATURE_LEVEL levels[] = { D3D_FEATURE_LEVEL_11_0 };
         hr = D3D11CreateDevice(
             NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, flags, levels, ARRAYSIZE(levels),
@@ -108,8 +190,9 @@ HRESULT render_init_d3d11(HWND window, render_context* rContext, game_camera* ca
         AssertHR(hr);
     }
 	
+	#ifdef NDEBUG
     {
-		#ifdef NDEBUG
+		
 	
 		// for debug builds enable VERY USEFUL debug break on API errors
         ID3D11InfoQueue* info;
@@ -130,6 +213,7 @@ HRESULT render_init_d3d11(HWND window, render_context* rContext, game_camera* ca
     }
     // debugger will break on errors
 	#endif
+
 	
 	// create DXGI swap chain
 	{
@@ -215,24 +299,24 @@ HRESULT render_init_d3d11(HWND window, render_context* rContext, game_camera* ca
         };
 
 
-		char vsLocation[] = "triangle.vs.fxc";
-		char psLocation[] = "triangle.ps.fxc";
+		// char vsLocation[] = "triangle.vs.fxc";
+		// char psLocation[] = "triangle.ps.fxc";
 	
-		complete_file vblob = {0};
-		complete_file pblob = {0};
+		// complete_file vblob = {0};
+		// complete_file pblob = {0};
 		
-		file_fullread(vsLocation, &vblob);
-		file_fullread(psLocation, &pblob);
+		// file_fullread(vsLocation, &vblob);
+		// file_fullread(psLocation, &pblob);
 		
 		
 		// this is where we send shaders to the GPU
 		
-        hr = rContext->device->CreateVertexShader(vblob.memory, vblob.size, NULL, &rContext->vshader);
-        hr = rContext->device->CreatePixelShader(pblob.memory, pblob.size, NULL, &rContext->pshader);
-        hr = rContext->device->CreateInputLayout(desc, ARRAYSIZE(desc), vblob.memory, vblob.size, &rContext->layout);
+        // hr = rContext->device->CreateVertexShader(vblob.memory, vblob.size, NULL, &rContext->vshader);
+        // hr = rContext->device->CreatePixelShader(pblob.memory, pblob.size, NULL, &rContext->pshader);
+        // hr = rContext->device->CreateInputLayout(desc, ARRAYSIZE(desc), vblob.memory, vblob.size, &rContext->layout);
 
-		file_fullfree(&vblob);
-		file_fullfree(&pblob);
+		// file_fullfree(&vblob);
+		// file_fullfree(&pblob);
     }
 	
 	{
@@ -243,11 +327,11 @@ HRESULT render_init_d3d11(HWND window, render_context* rContext, game_camera* ca
 		// todo: asset pipeline for textures
 		
 		// for testing
-        // unsigned int pixels[] =
-        // {
-            // 0x80000000, 0xffffffff,
-            // 0xffffffff, 0x80000000,
-        // };
+        unsigned int pixels[] =
+        {
+            0x80000000, 0xffffffff,
+            0xffffffff, 0x80000000,
+        };
 		
 		// open and decode the hitcircle texture
 		// char* location = gameTextureLocation;
@@ -256,8 +340,8 @@ HRESULT render_init_d3d11(HWND window, render_context* rContext, game_camera* ca
 
         D3D11_TEXTURE2D_DESC desc =
         {
-            .Width = hitcircle_sprite.x,
-            .Height = hitcircle_sprite.y,
+            .Width = 2,
+            .Height = 2,
             .MipLevels = 1,
             .ArraySize = 1,
             .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
@@ -268,15 +352,15 @@ HRESULT render_init_d3d11(HWND window, render_context* rContext, game_camera* ca
 
         D3D11_SUBRESOURCE_DATA data =
         {
-            .pSysMem = hitcircle_sprite.memory,
-            .SysMemPitch = hitcircle_sprite.x * hitcircle_sprite.channels_in_file,
+            .pSysMem = pixels,
+            .SysMemPitch = sizeof(pixels),
         };
 
         ID3D11Texture2D* texture;
         rContext->device->CreateTexture2D(&desc, &data, &texture);
         rContext->device->CreateShaderResourceView((ID3D11Resource*)texture, NULL, &rContext->textureView);
         texture->Release();
-		file_fullfree(&textureFile);
+		// file_fullfree(&textureFile);
     }
 	
 	// sampler
@@ -335,8 +419,8 @@ HRESULT render_init_d3d11(HWND window, render_context* rContext, game_camera* ca
 	
 	// create Dynamic Shader Buffer
     {
-		RENDER_INIT_DYNAMIC_VertexBuffer(rContext, 2048);
-		render_upload_camera_uBuffer(rContext, camera, vp);
+		render_create_dynamic_vbuffer(rContext, 2048);
+		render_upload_camera_ubuffer(rContext, game_camera, vp);
     }
 
 
@@ -348,4 +432,10 @@ HRESULT render_init_d3d11(HWND window, render_context* rContext, game_camera* ca
 	return hr;
 }
 
-#endif /* _DX11H_ */
+
+void render_reset_frame(render_context* rContext){
+	rContext->vCount = 0;
+};
+
+
+#endif /* _RENDERH_ */
