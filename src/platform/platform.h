@@ -69,7 +69,7 @@ i64 platform_get_tick(){
 f64 platform_get_time(i32 clock){
 	i64 tick = platform_get_tick();
 	f64 time = tick / (f64)clock;
-    return time;
+    return time; // time in seconds (f64 cuz we need precision)
 }
 
 

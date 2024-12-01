@@ -79,8 +79,14 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previnstance, LPSTR cmdline, in
     
 	camera camera = {0};
 	
-	// Init D3D11 + context
+	// contexes and global structures
 	render_context rContext = {0};
+	ui_context uiContext = {
+		.fps = 0,
+		.fps_display_delay = 0.5f,
+	};
+	
+	// init rendering context
 	hr = render_init_d3d11(window, &rContext, &camera);
 
 
@@ -100,9 +106,9 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previnstance, LPSTR cmdline, in
 	
 	for (;;)
     {
-		f64 newTime = platform_get_time(platformClockSpeed);
+		f64 new_time = platform_get_time(platformClockSpeed);
 	
-        // process all incoming Windows messages
+        // windows api message processing
         MSG msg;
         if (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE))
         {
@@ -115,7 +121,17 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previnstance, LPSTR cmdline, in
             continue;
         }
 		
-		// RENDERING (DX)
+		// --------------------------- STATES
+		
+		    LARGE_INTEGER c2;
+            QueryPerformanceCounter(&c2);
+            f32 delta = (f32)((f64)(c2.QuadPart - c1.QuadPart) / platformClockSpeed);
+            c1 = c2;
+			
+			// update fps
+			update_ui_context(&uiContext, 1.0f/delta, new_time);
+		
+		// --------------------------- RENDERING
 
         // reset frame and rendering data
 		// render_reset_frame(&rContext);
@@ -129,10 +145,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previnstance, LPSTR cmdline, in
 			// resize the camera
 			// render_upload_camera_uBuffer(&rContext, &camera, windowSize);
 			
-            LARGE_INTEGER c2;
-            QueryPerformanceCounter(&c2);
-            float delta = (f32)((f64)(c2.QuadPart - c1.QuadPart) / platformClockSpeed);
-            c1 = c2;
+
 
             // output viewport covering all client area of window
 
@@ -150,7 +163,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previnstance, LPSTR cmdline, in
 			imgui_render();
 			
 			if(ImGui::Begin("test")){
-				ImGui::Text("FPS : %f", 1.0f/delta);
+				ImGui::Text("FPS : %f", uiContext.fps);
 				
 				if(ImGui::Button("button")){
 					ImGui::Text("pressed");
@@ -188,6 +201,6 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previnstance, LPSTR cmdline, in
             FatalError("Failed to present swap chain! Device lost?");
         }
 		
-		currentTime = newTime;
+		currentTime = new_time;
     }
 }
