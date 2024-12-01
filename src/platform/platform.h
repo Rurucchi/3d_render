@@ -9,8 +9,8 @@
 // structs
 
 struct viewport_size {
-    int width;
-    int height;
+	i32 width;
+	i32 height;
 };
 
 // functions
@@ -127,8 +127,8 @@ viewport_size platform_get_window_size(HWND window) {
 	GetClientRect(window, &rect);
 		
 	viewport_size newWindowSize = {
-	(i32)rect.bottom - rect.top << 0,
 	(i32)rect.right - rect.left << 0,
+	(i32)rect.bottom - rect.top << 0,
 	};
 		
 	return newWindowSize;

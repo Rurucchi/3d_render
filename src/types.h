@@ -43,4 +43,17 @@ ui32 SafeTruncateUInt64(ui64 value){
   return result;
 }
 
+ui32 int_to_ui32(int x) {
+	return (ui32)x << 0;
+};
+
+//  ----------------------------------- math
+float slope(float min, float max, float cap) {
+	return (max - min) / cap;
+};
+
+float lerp(float v0, float v1, float t) {
+  return v0 + t * (v1 - v0);
+}
+
 #endif /* _TYPESH_ */

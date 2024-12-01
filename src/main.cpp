@@ -89,7 +89,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previnstance, LPSTR cmdline, in
 
 	imgui_init(window, rContext);
 	
-	viewport_size windowSize = {
+	viewport_size window_size = {
 		.width = 0,
 		.height = 0,
 	};
@@ -115,7 +115,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previnstance, LPSTR cmdline, in
             continue;
         }
 		
-		windowSize = platform_get_window_size(window);
+		window_size = platform_get_window_size(window);
 		
 		// RENDERING (DX)
 
@@ -123,11 +123,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previnstance, LPSTR cmdline, in
 		// render_reset_frame(&rContext);
 		
 		// resize swap chain if needed
-		hr = rContext.swapChain->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0);
-        if (FAILED(hr))
-        {
-            FatalError("Failed to resize swap chain!");
-        }
+		render_resize_swapchain(window, &window_size, &rContext);
 
         // can render only if window size is non-zero - we must have backbuffer & RenderTarget view created
         if (rContext.rtView)
@@ -142,13 +138,12 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previnstance, LPSTR cmdline, in
 
             // output viewport covering all client area of window
 
+			render_init_pipeline(&rContext, &window_size);
 
             // clear screen
-            FLOAT color[] = { 0.f, 0.f, 1.f, 1.f };
+            FLOAT color[] = { 0.f, 0.f, 1.f, 0.5f };
             rContext.context->ClearRenderTargetView(rContext.rtView, color);
             rContext.context->ClearDepthStencilView(rContext.dsView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.f, 0);
-
-			render_init_pipeline(&rContext, &windowSize);
 			
 			// ---------------------------- add stuff to render
 		
@@ -170,7 +165,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previnstance, LPSTR cmdline, in
 			// todo: upload vertices to GPU
 			
 			// todo: draw vertices
-            rContext.context->Draw(rContext.vCount, 0);
+            // rContext.context->Draw(rContext.vCount, 0);
         }
 
         // change to FALSE to disable vsync

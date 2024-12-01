@@ -164,6 +164,65 @@ void render_init_pipeline(render_context* rContext, viewport_size* vpSize){
 	};
 };
 
+void render_resize_swapchain(HWND window, viewport_size* window_size, render_context* rContext) {
+	
+		HRESULT hr;
+	
+        // get current size for window client area
+		viewport_size new_window_size = platform_get_window_size(window);
+		
+		
+	    if (rContext->rtView == NULL || new_window_size.width != window_size->width || new_window_size.height != window_size->height) {
+            if (rContext->rtView)
+            {
+                // release old swap chain buffers
+                rContext->context->ClearState();
+                rContext->rtView->Release();
+                rContext->dsView->Release();
+                rContext->rtView = NULL;
+            }
+
+            // resize to new size for non-zero size
+            if (new_window_size.width != 0 && new_window_size.height != 0)
+            {
+                hr = rContext->swapChain->ResizeBuffers(0, new_window_size.width, new_window_size.height, DXGI_FORMAT_UNKNOWN, 0);
+                if (FAILED(hr))
+                {
+                    FatalError("Failed to resize swap chain!");
+                }
+
+                // create RenderTarget view for new backbuffer texture
+                ID3D11Texture2D* backbuffer;
+                hr = rContext->swapChain->GetBuffer(0, IID_ID3D11Texture2D, (void**)&backbuffer);
+				// rContext->swapChain->GetBuffer(0, IID_PPV_ARGS(&backbuffer));
+                hr = rContext->device->CreateRenderTargetView(backbuffer, NULL, &rContext->rtView);
+                backbuffer->Release();
+
+                D3D11_TEXTURE2D_DESC depthDesc = 
+                {
+                    .Width = int_to_ui32(new_window_size.width),
+                    .Height = int_to_ui32(new_window_size.height),
+                    .MipLevels = 1,
+                    .ArraySize = 1,
+                    .Format = DXGI_FORMAT_D32_FLOAT, // or use DXGI_FORMAT_D32_FLOAT_S8X24_UINT if you need stencil
+                    .SampleDesc = { 1, 0 },
+                    .Usage = D3D11_USAGE_DEFAULT,
+                    .BindFlags = D3D11_BIND_DEPTH_STENCIL,
+                };
+
+                // create new depth stencil texture & DepthStencil view
+                ID3D11Texture2D* depth;
+                rContext->device->CreateTexture2D(&depthDesc, NULL, &depth);
+                rContext->device->CreateDepthStencilView(depth, NULL, &rContext->dsView);
+                depth->Release();
+            }
+
+			window_size->width = new_window_size.width;
+			window_size->height = new_window_size.height;
+        }
+};
+
+
 HRESULT render_init_d3d11(HWND window, render_context* rContext, camera* game_camera) {
 	/* doc:
 	https://learn.microsoft.com/en-us/windows/win32/api/d3d11/nf-d3d11-d3d11createdevice */
@@ -350,16 +409,16 @@ HRESULT render_init_d3d11(HWND window, render_context* rContext, camera* game_ca
             .BindFlags = D3D11_BIND_SHADER_RESOURCE,
         };
 
-        D3D11_SUBRESOURCE_DATA data =
-        {
-            .pSysMem = pixels,
-            .SysMemPitch = sizeof(pixels),
-        };
+        // D3D11_SUBRESOURCE_DATA data =
+        // {
+            // .pSysMem = pixels,
+            // .SysMemPitch = sizeof(pixels),
+        // };
 
-        ID3D11Texture2D* texture;
-        rContext->device->CreateTexture2D(&desc, &data, &texture);
-        rContext->device->CreateShaderResourceView((ID3D11Resource*)texture, NULL, &rContext->textureView);
-        texture->Release();
+        // ID3D11Texture2D* texture;
+        // rContext->device->CreateTexture2D(&desc, &data, &texture);
+        // rContext->device->CreateShaderResourceView((ID3D11Resource*)texture, NULL, &rContext->textureView);
+        // texture->Release();
 		// file_fullfree(&textureFile);
     }
 	
