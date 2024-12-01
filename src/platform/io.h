@@ -8,14 +8,6 @@
 #ifndef _IOH_
 #define _IOH_
 
-#include <windows.h>
-#include <wincodec.h>
-#include "../types.h"
-
-#define internal static
-#define local_persist static
-#define global_variable static
-
 //  ------------------------------------ STRUCTS
 
 typedef struct complete_file {
@@ -67,7 +59,7 @@ typedef struct texture {
 
 //  ------------------------------------ FILE RELATED FUNCTIONS
 
-HANDLE file_createHandle(char *location) {
+HANDLE io_createHandle(char *location) {
 	HANDLE rawFile = CreateFileA(location, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
 	
 	if (rawFile == INVALID_HANDLE_VALUE)
@@ -78,7 +70,7 @@ HANDLE file_createHandle(char *location) {
 	return rawFile;
 }
 
-void file_fullread(char *location, complete_file *file){
+void io_file_fullread(char *location, complete_file *file){
 	HANDLE rawFile = file_createHandle(location);
 	
 	//check the handle
@@ -100,7 +92,7 @@ void file_fullread(char *location, complete_file *file){
 
 }
 
-void file_fullfree(complete_file *file){
+void io_file_fullfree(complete_file *file){
 	// free the memory of the file
 	VirtualFree(
 	  file->memory,
@@ -111,7 +103,7 @@ void file_fullfree(complete_file *file){
 
 
 // todo: finish this
-complete_img file_decodePNG(char *location, complete_file *file) {
+complete_img io_file_decode_png(char *location, complete_file *file) {
 	complete_img img = {0};
 	
 	file_fullread(location, file);

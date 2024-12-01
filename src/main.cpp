@@ -115,8 +115,6 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previnstance, LPSTR cmdline, in
             continue;
         }
 		
-		window_size = platform_get_window_size(window);
-		
 		// RENDERING (DX)
 
         // reset frame and rendering data
