@@ -3,3 +3,4 @@ build
 /build
 /.vs
 vc140.pdb
+/.vscode
