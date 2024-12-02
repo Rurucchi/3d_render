@@ -351,23 +351,21 @@ HRESULT render_init_shaders(render_context* rContext) {
 HRESULT render_init_textures(render_context* rContext) {
 	HRESULT hr;
 	
-	// todo: rewrite all of this
-		
-    // checkerboard texture, with 50% transparency on black colors
+	// todo: rewrite all of this (it sucks)
 		
 	// todo: asset pipeline for textures
 		
 	// for testing
-    unsigned int pixels[] =
-    {
-        0x80000000, 0xffffffff,
-        0xffffffff, 0x80000000,
-    };
+    // unsigned int pixels[] =
+    // {
+        // 0x80000000, 0xffffffff,
+        // 0xffffffff, 0x80000000,
+    // };
 		
 	// open and decode the texture
-	char* location = gameTextureLocation;
-	complete_file textureFile = {0};
-	complete_img hitcircle_sprite = file_decodePNG(location, &textureFile);
+	char location[] = "texture.png";
+	complete_file texture_file = {0};
+	complete_img tex = parse_decode_img(location, &texture_file);
 
     D3D11_TEXTURE2D_DESC desc =
     {
@@ -383,15 +381,15 @@ HRESULT render_init_textures(render_context* rContext) {
 
     D3D11_SUBRESOURCE_DATA data =
     {
-    .pSysMem = pixels,
-    .SysMemPitch = sizeof(pixels),
+		.pSysMem = tex.memory,
+		.SysMemPitch = tex.x * tex.channels_in_file,
     };
 
     ID3D11Texture2D* texture;
     hr = rContext->device->CreateTexture2D(&desc, &data, &texture);
     hr = rContext->device->CreateShaderResourceView((ID3D11Resource*)texture, NULL, &rContext->textureView);
     texture->Release();
-	io_file_fullfree(&textureFile);
+	io_file_fullfree(&texture_file);
 	
 	return hr;
 };
@@ -421,6 +419,8 @@ HRESULT render_init_sampler(render_context* rContext) {
 };
 
 HRESULT render_init_ds(render_context* rContext){
+	HRESULT hr;
+	
 	// todo: disabled depth & stencil test for now, will be enabled later
 	D3D11_DEPTH_STENCIL_DESC desc =
 	{
@@ -438,30 +438,9 @@ HRESULT render_init_ds(render_context* rContext){
 	return hr;
 };
 
-HRESULT render_init_sampler(render_context* rContext){
+HRESULT render_init_rasterizer(render_context* rContext){
 	HRESULT hr;
 	
-	/* doc:
-	https://learn.microsoft.com/en-us/windows/win32/api/d3d11/nf-d3d11-id3d11device-createsamplerstate
-	https://learn.microsoft.com/en-us/windows/win32/api/d3d11/ns-d3d11-d3d11_sampler_desc */
-		
-	D3D11_SAMPLER_DESC desc =
-	{
-		.Filter = D3D11_FILTER_MIN_MAG_POINT_MIP_LINEAR,
-		.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP,
-		.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP,
-		.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP,
-		.MipLODBias = 0,
-		.MaxAnisotropy = 1,
-		.MinLOD = 0,
-		.MaxLOD = D3D11_FLOAT32_MAX,
-	};
-
-	hr = rContext->device->CreateSamplerState(&desc, &rContext->sampler);
-	return hr;
-};
-
-HRESULT render_init_rasterizer(render_context* rContext){
 	// todo: disabled culling for now, check if we enable it later
 	// more info: https://github.com/ssloy/tinyrenderer/wiki/Lesson-2:-Triangle-rasterization-and-back-face-culling
 	/* doc:

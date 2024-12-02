@@ -5,8 +5,7 @@
 
 #ifndef _PARSERH_
 #define _PARSERH_
------------------------------ TEXTURES FORMAT & IMAGES
-// -------
+// ----------------------------- formats and structs
 
 typedef struct complete_img {
 	ui32 x;
@@ -15,8 +14,10 @@ typedef struct complete_img {
 	void *memory;
 } complete_img;
 
+// ---------------------------- parsing time!
+
 // todo: finish this
-complete_img parse_decode_png(char *location, complete_file *file) {
+complete_img parse_decode_img(char *location, complete_file *file) {
 	complete_img img = {0};
 	
 	io_file_fullread(location, file);

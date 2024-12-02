@@ -59,6 +59,7 @@
 #include "types.h"
 #include "platform/platform.h"
 #include "platform/io.h"
+#include "parser.h"
 #include "render/render.h"
 #include "render/ui.h"
 
