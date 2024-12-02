@@ -58,6 +58,7 @@
 // Custom 
 #include "types.h"
 #include "platform/platform.h"
+#include "platform/io.h"
 #include "render/render.h"
 #include "render/ui.h"
 
@@ -83,7 +84,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previnstance, LPSTR cmdline, in
 	render_context rContext = {0};
 	ui_context uiContext = {
 		.fps = 0,
-		.fps_display_delay = 0.5f,
+		.fps_display_delay = 0.1f, // in seconds
 	};
 	
 	// init rendering context
@@ -149,7 +150,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previnstance, LPSTR cmdline, in
 
             // output viewport covering all client area of window
 
-			render_init_pipeline(&rContext, &window_size);
+			render_pipeline_states(&rContext, &window_size);
 
             // clear screen
             FLOAT color[] = { 0.f, 0.f, 1.f, 0.5f };
