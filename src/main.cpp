@@ -79,17 +79,17 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previnstance, LPSTR cmdline, in
 	
 	f64 currentTime = platform_get_time(platformClockSpeed);
     
-	camera camera = {0};
+	camera rCamera = {0};
 	
 	// contexes and global structures
 	render_context rContext = {0};
 	ui_context uiContext = {
 		.fps = 0,
-		.fps_display_delay = 0.1f, // in seconds
+		.fps_display_delay = 0.05f, // in seconds
 	};
 	
 	// init rendering context
-	hr = render_init_d3d11(window, &rContext, &camera);
+	hr = render_init_d3d11(window, &rContext, &rCamera);
 
 
     // show the window
@@ -104,11 +104,27 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previnstance, LPSTR cmdline, in
 	
 	int clockFrequency;
 	
+	// -------------------------------------------- rendering testing
+	
+	vertex vertice_data[3] = 
+	{
+	{{0.f,100.f},{0.f,0.f},{1.f,1.f,1.f}},
+	{{-100.f,0.f},{0.f,1.f},{1.f,1.f,1.f}},
+	{{100.f,0.f},{1.f,0.f},{1.f,1.f,1.f}},
+	};
+	
+	mesh mesh_data = {
+		.vertice_count = 3,
+		.vertices = vertice_data,
+	};
+	
 	//  ------------------------------------------- frame loop
 	
 	for (;;)
     {
+		// update states here
 		f64 new_time = platform_get_time(platformClockSpeed);
+		window_size = platform_get_window_size(window);
 	
         // windows api message processing
         MSG msg;
@@ -136,29 +152,30 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previnstance, LPSTR cmdline, in
 		// --------------------------- RENDERING
 
         // reset frame and rendering data
-		// render_reset_frame(&rContext);
+		render_reset_frame(&rContext);
 		
-		// resize swap chain if needed
+		// resize swap chain if needed + updates window_size too
 		render_resize_swapchain(window, &window_size, &rContext);
 
         // can render only if window size is non-zero - we must have backbuffer & RenderTarget view created
         if (rContext.rtView)
         {
-			// resize the camera
-			// render_upload_camera_uBuffer(&rContext, &camera, windowSize);
-			
-
-
-            // output viewport covering all client area of window
-
+            // reset all our pipeline states and input assembler
 			render_pipeline_states(&rContext, &window_size);
-
-            // clear screen
-            FLOAT color[] = { 0.f, 0.f, 1.f, 0.5f };
-            rContext.context->ClearRenderTargetView(rContext.rtView, color);
-            rContext.context->ClearDepthStencilView(rContext.dsView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.f, 0);
 			
-			// ---------------------------- add stuff to render
+			// clear screen
+			f32 color[4] = { 0.f, 0.f, 0.f, 1.f };
+			render_clear_screen(&rContext, color);
+			
+			// add vertex to our queue
+			render_mesh_vqueue(&rContext, mesh_data);
+			
+			// ---------------------------- upload stuff to the gpu
+			
+			// resize the camera and send it
+			render_upload_camera_ubuffer(&rContext, &rCamera, window_size);
+			render_upload_dynamic_vbuffer(&rContext);
+			
 		
 			
 			// IMGUI RENDER
@@ -174,21 +191,17 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previnstance, LPSTR cmdline, in
 
 			ImGui::Render();
 			ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-					
-			// todo: upload vertices to GPU
 			
 			// todo: draw vertices
-            // rContext.context->Draw(rContext.vCount, 0);
+            rContext.context->Draw(rContext.vCount, 0);
         }
 
         // change to FALSE to disable vsync
         BOOL vsync = FALSE;
         hr = rContext.swapChain->Present(vsync ? 1 : 0, 0);
 		
-		// error control
-		// hr = rContext.device->GetDeviceRemovedReason();
-		
-		
+		// debug code
+		hr = rContext.device->GetDeviceRemovedReason();
 		
         if (hr == DXGI_STATUS_OCCLUDED)
         {

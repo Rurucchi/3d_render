@@ -49,7 +49,7 @@ struct render_context {
 	
 	// buffers and shaders
 	int vCount;
-	vertex vQueue[4096];
+	vertex vQueue[16384];
 	ID3D11Buffer* vbuffer;
 	ID3D11Buffer* ubuffer;
 	ID3D11SamplerState* sampler;
@@ -61,6 +61,14 @@ struct camera
     v2 position;
     f32 ratio;
     f32 scale; // height = scale, width = ratio * scale
+};
+
+// mesh?
+
+struct mesh // this will 
+{
+	ui32 vertice_count;
+	vertex* vertices;
 };
 
 // camera projection
@@ -84,6 +92,13 @@ mx game_OrthographicProjection(camera* game_camera, float width, float height)
 // ------------------------------- functions
 
 // ----------- dx pipeline stuff
+
+void render_mesh_vqueue(render_context* rContext, mesh mesh_data) {
+	for(int i=0; i < mesh_data.vertice_count; i++) {
+		rContext->vQueue[rContext->vCount] = mesh_data.vertices[i];
+		rContext->vCount++;
+	};
+};
 
 void render_resize_swapchain(HWND window, viewport_size* window_size, render_context* rContext) {
 	
@@ -183,13 +198,18 @@ void render_pipeline_states(render_context* rContext, viewport_size* vpSize){
 	};
 };
 
+void render_clear_screen(render_context* rContext, f32 color[4]){
+        rContext->context->ClearRenderTargetView(rContext->rtView, color);
+        rContext->context->ClearDepthStencilView(rContext->dsView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.f, 0);
+};
+
 void render_reset_frame(render_context* rContext){
 	rContext->vCount = 0;
 };
 
 // ----------- calls to the gpu
 
-void render_upload_dynamic_vqueue(render_context* rContext){
+void render_upload_dynamic_vbuffer(render_context* rContext){
 	D3D11_MAPPED_SUBRESOURCE mapped;
 	
 	rContext->context->Map((ID3D11Resource*)rContext->vbuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
@@ -369,8 +389,8 @@ HRESULT render_init_textures(render_context* rContext) {
 
     D3D11_TEXTURE2D_DESC desc =
     {
-        .Width = 2,
-        .Height = 2,
+        .Width = tex.x,
+        .Height = tex.y,
         .MipLevels = 1,
         .ArraySize = 1,
         .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
