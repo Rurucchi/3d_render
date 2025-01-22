@@ -10,13 +10,10 @@
 #define STR2(x) #x
 #define STR(x) STR2(x)
 
+// compiler stuff
 #define COBJMACROS
 #define WIN32_LEAN_AND_MEAN
 #define _USE_MATH_DEFINES
-#define IMGUI_DEFINE_MATH_OPERATORS
-#define IMGUI_IMPLEMENTATION
-#define RAYMATH_IMPLEMENTATION
-#define STB_IMAGE_IMPLEMENTATION
 
 #pragma comment (lib, "gdi32")
 #pragma comment (lib, "user32")
@@ -25,7 +22,7 @@
 #pragma comment (lib, "d3d11")
 #pragma comment (lib, "d3dcompiler")
 
-// DEPENDENCIES :
+// microsoft 
 
 #include <windows.h>
 #include <combaseapi.h>
@@ -33,12 +30,33 @@
 #include <dxgi1_3.h>
 #include <d3dcompiler.h>
 #include <dxgidebug.h>
+
+// std
 #include <math.h>
 #include <string.h>
 #include <stddef.h>
 #include <stdint.h>
 
+
+
+// raylib 
+// #define RL_VECTOR2_TYPE
+// #define RL_VECTOR3_TYPE
+// #define RL_MATRIX_TYPE
+#define RAYMATH_IMPLEMENTATION
+#include "raylib/raymath.h"
+// #include "raylib/rcamera_ex.h"
+#define RCAMERA_IMPLEMENTATION
+#define RCAMERA_STANDALONE
+#include "raylib/rcamera.h"
+
+// stb
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb/stb_image.h"
+
 // imgui libs
+#define IMGUI_DEFINE_MATH_OPERATORS
+#define IMGUI_IMPLEMENTATION
 #include "imgui.h"
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"
@@ -48,12 +66,6 @@
 #include "imgui_draw.cpp"
 #include "imgui_tables.cpp"
 #include "imgui_widgets.cpp"
-
-// raylib techs
-#include "raymath.h"
-
-// stb
-#include "stb_image.h"
 
 // Custom 
 #include "types.h"
@@ -78,8 +90,13 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previnstance, LPSTR cmdline, in
 	QueryPerformanceCounter(&c1);
 	
 	f64 currentTime = platform_get_time(platformClockSpeed);
-    
-	camera rCamera = {0};
+    	
+	Camera camera = { 0 };
+    camera.position = { -10.0f, 10.0f, -10.0f };  // Camera position
+    camera.target = { 0.0f, 0.0f, 0.0f };      // Camera looking at point
+    camera.up = { 0.0f, 1.0f, 0.0f };          // Camera up vector (rotation towards target)
+    camera.fovy = 90.0f;                                // Camera field-of-view Y
+    camera.projection = CAMERA_PERSPECTIVE;             // Camera mode type
 	
 	// contexes and global structures
 	render_context rContext = {0};
@@ -89,7 +106,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previnstance, LPSTR cmdline, in
 	};
 	
 	// init rendering context
-	hr = render_init_d3d11(window, &rContext, &rCamera);
+	hr = render_init_d3d11(window, &rContext);
 
 
     // show the window
@@ -106,15 +123,59 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previnstance, LPSTR cmdline, in
 	
 	// -------------------------------------------- rendering testing
 	
-	vertex vertice_data[3] = 
-	{
-	{{0.f,100.f},{0.f,0.f},{1.f,1.f,1.f}},
-	{{-100.f,0.f},{0.f,1.f},{1.f,1.f,1.f}},
-	{{100.f,0.f},{1.f,0.f},{1.f,1.f,1.f}},
-	};
-	
+	// this is our box
+	struct vertex vertice_data[] = {
+    // Front face
+    {{-0.5f, -0.5f,  0.5f}, {0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Bottom-left
+    {{-0.5f,  0.5f,  0.5f}, {0.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Top-left
+    {{ 0.5f,  0.5f,  0.5f}, {1.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Top-right
+    {{-0.5f, -0.5f,  0.5f}, {0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Bottom-left
+    {{ 0.5f,  0.5f,  0.5f}, {1.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Top-right
+    {{ 0.5f, -0.5f,  0.5f}, {1.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Bottom-right
+
+    // Back face
+    {{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Bottom-left
+    {{-0.5f,  0.5f, -0.5f}, {0.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Top-left
+    {{ 0.5f,  0.5f, -0.5f}, {1.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Top-right
+    {{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Bottom-left
+    {{ 0.5f,  0.5f, -0.5f}, {1.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Top-right
+    {{ 0.5f, -0.5f, -0.5f}, {1.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Bottom-right
+
+    // Left face
+    {{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Bottom-left
+    {{-0.5f,  0.5f, -0.5f}, {0.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Top-left
+    {{-0.5f,  0.5f,  0.5f}, {1.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Top-right
+    {{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Bottom-left
+    {{-0.5f,  0.5f,  0.5f}, {1.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Top-right
+    {{-0.5f, -0.5f,  0.5f}, {1.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Bottom-right
+
+    // Right face
+    {{ 0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Bottom-left
+    {{ 0.5f,  0.5f, -0.5f}, {0.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Top-left
+    {{ 0.5f,  0.5f,  0.5f}, {1.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Top-right
+    {{ 0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Bottom-left
+    {{ 0.5f,  0.5f,  0.5f}, {1.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Top-right
+    {{ 0.5f, -0.5f,  0.5f}, {1.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Bottom-right
+
+    // Top face
+    {{-0.5f,  0.5f, -0.5f}, {0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Bottom-left
+    {{-0.5f,  0.5f,  0.5f}, {0.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Top-left
+    {{ 0.5f,  0.5f,  0.5f}, {1.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Top-right
+    {{-0.5f,  0.5f, -0.5f}, {0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Bottom-left
+    {{ 0.5f,  0.5f,  0.5f}, {1.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Top-right
+    {{ 0.5f,  0.5f, -0.5f}, {1.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Bottom-right
+
+    // Bottom face
+    {{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Bottom-left
+    {{-0.5f, -0.5f,  0.5f}, {0.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Top-left
+    {{ 0.5f, -0.5f,  0.5f}, {1.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Top-right
+    {{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Bottom-left
+    {{ 0.5f, -0.5f,  0.5f}, {1.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Top-right
+    {{ 0.5f, -0.5f, -0.5f}, {1.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, // Bottom-right
+};
+
 	mesh mesh_data = {
-		.vertice_count = 3,
+		.vertice_count = 36,
 		.vertices = vertice_data,
 	};
 	
@@ -164,19 +225,17 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previnstance, LPSTR cmdline, in
 			render_pipeline_states(&rContext, &window_size);
 			
 			// clear screen
-			f32 color[4] = { 0.f, 0.f, 0.f, 1.f };
+			f32 color[4] = { 0.2f, 0.2f, 0.2f, 1.f }; // black
 			render_clear_screen(&rContext, color);
 			
-			// add vertex to our queue
-			render_mesh_vqueue(&rContext, mesh_data);
-			
-			// ---------------------------- upload stuff to the gpu
+			// ----- upload stuff to the gpu before rendering
 			
 			// resize the camera and send it
-			render_upload_camera_ubuffer(&rContext, &rCamera, window_size);
-			render_upload_dynamic_vbuffer(&rContext);
+			render_upload_frame_buffer(&rContext, &camera, window_size);
 			
-		
+			
+			// ----- rendering
+			render_draw_mesh(&rContext, mesh_data);
 			
 			// IMGUI RENDER
 			imgui_render();
@@ -191,13 +250,10 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previnstance, LPSTR cmdline, in
 
 			ImGui::Render();
 			ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-			
-			// todo: draw vertices
-            rContext.context->Draw(rContext.vCount, 0);
         }
 
         // change to FALSE to disable vsync
-        BOOL vsync = FALSE;
+        BOOL vsync = TRUE;
         hr = rContext.swapChain->Present(vsync ? 1 : 0, 0);
 		
 		// debug code

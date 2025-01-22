@@ -77,26 +77,6 @@
 // NOTE: Below types are required for standalone usage
 //----------------------------------------------------------------------------------
 #if defined(RCAMERA_STANDALONE)
-    // Vector2, 2 components
-    typedef struct Vector2 {
-        float x;                // Vector x component
-        float y;                // Vector y component
-    } Vector2;
-
-    // Vector3, 3 components
-    typedef struct Vector3 {
-        float x;                // Vector x component
-        float y;                // Vector y component
-        float z;                // Vector z component
-    } Vector3;
-
-    // Matrix, 4x4 components, column major, OpenGL style, right-handed
-    typedef struct Matrix {
-        float m0, m4, m8, m12;  // Matrix first row (4 components)
-        float m1, m5, m9, m13;  // Matrix second row (4 components)
-        float m2, m6, m10, m14; // Matrix third row (4 components)
-        float m3, m7, m11, m15; // Matrix fourth row (4 components)
-    } Matrix;
 
     // Camera type, defines a camera position/orientation in 3d space
     typedef struct Camera3D {

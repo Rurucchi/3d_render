@@ -1,7 +1,7 @@
 struct VS_INPUT {
-	float2 pos   : POSITION;		// these names must match D3D11_INPUT_ELEMENT_DESC array
+	float3 pos   : POSITION;		// these names must match D3D11_INPUT_ELEMENT_DESC array
     float2 uv    : TEXCOORD;
-    float3 color : COLOR;
+    float4 color : COLOR;
 };
 
 struct PS_INPUT {
@@ -10,11 +10,19 @@ struct PS_INPUT {
     float4 color : COLOR;
 };
 
-// b0 = constant buffer bound to slot 0
+
+// ------- frame_buffer
+// b0 = constant buffer bound to slot 0 
 cbuffer cbuffer0 : register(b0)	{
-	float4x4 uTransform;
-	float4x4 pos;
+	float4x4 view_projection;
 }
+
+// ------- object buffer
+cbuffer cbuffer1 : register(b1)	{
+	float4x4 world;
+}
+
+// ------- View matrix buffer
 
 // s0 = sampler bound to slot 0
 sampler sampler0 : register(s0);	
@@ -26,10 +34,10 @@ PS_INPUT vs(VS_INPUT input) {
 	PS_INPUT output;
 	
 	// rotation + pos transform
-    output.pos = mul(uTransform, float4(input.pos, 0, 1));
+    output.pos = mul(float4(input.pos, 1), view_projection);
 	
 	output.uv = input.uv;
-    output.color = float4(input.color, 1);
+    output.color = input.color;
     return output;
 }
 

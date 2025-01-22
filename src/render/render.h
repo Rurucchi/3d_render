@@ -23,9 +23,18 @@
 
 struct vertex
 {
-    f32 position[2];
-    f32 uv[2];
-    f32 color[3];
+    v3 pos;
+    v2 uv;
+    v4 color;
+};
+
+// mesh?
+
+struct mesh
+{
+	v3 pos;
+	ui32 vertice_count;
+	vertex* vertices;
 };
 
 // this will change depending on what we need
@@ -35,65 +44,38 @@ struct render_context {
 	ID3D11DeviceContext* context;
 	IDXGISwapChain1* swapChain;
 	
-	// rc states
+	// states
 	ID3D11RenderTargetView* rtView;
 	ID3D11DepthStencilView* dsView; 
 	ID3D11InputLayout* layout;
 	ID3D11RasterizerState* rasterizerState;
 	
-	ID3D11VertexShader* vshader;
-    ID3D11PixelShader* pshader;
+
 	ID3D11ShaderResourceView* textureView;
 	ID3D11DepthStencilState* depthState;
 	ID3D11BlendState* blendState;
+	ID3D11SamplerState* sampler;
 	
-	// buffers and shaders
+	// shaders
+	ID3D11VertexShader* vshader;
+    ID3D11PixelShader* pshader;
+	
+	// buffers
 	int vCount;
 	vertex vQueue[16384];
-	ID3D11Buffer* vbuffer;
-	ID3D11Buffer* ubuffer;
-	ID3D11SamplerState* sampler;
+	ID3D11Buffer* vertex_buffer; // vertex buffer
+	ID3D11Buffer* frame_buffer; // buffer static to the frame
+	ID3D11Buffer* object_buffer; // updated for each object drawn (inefficient)
+	
 };
-
-// camera
-struct camera
-{
-    v2 position;
-    f32 ratio;
-    f32 scale; // height = scale, width = ratio * scale
-};
-
-// mesh?
-
-struct mesh // this will 
-{
-	ui32 vertice_count;
-	vertex* vertices;
-};
-
-// camera projection
-mx game_OrthographicProjection(camera* game_camera, float width, float height)
-{
-    float L = game_camera->position.x - width / 2.f;
-    float R = game_camera->position.x + width / 2.f;
-    float T = game_camera->position.y + height / 2.f;
-    float B = game_camera->position.y - height / 2.f;
-    mx res = 
-    {
-        2.0f/(R-L),   0.0f,           0.0f,       0.0f,
-        0.0f,         2.0f/(T-B),     0.0f,       0.0f,
-        0.0f,         0.0f,           0.5f,       0.0f,
-        (R+L)/(L-R),  (T+B)/(B-T),    0.5f,       1.0f,
-    };
-    
-    return res;
-}
 
 // ------------------------------- functions
 
+// ----------- matrices operations
+
 // ----------- dx pipeline stuff
 
-void render_mesh_vqueue(render_context* rContext, mesh mesh_data) {
+void render_queue_vertex(render_context* rContext, mesh mesh_data) {
 	for(int i=0; i < mesh_data.vertice_count; i++) {
 		rContext->vQueue[rContext->vCount] = mesh_data.vertices[i];
 		rContext->vCount++;
@@ -140,16 +122,22 @@ void render_resize_swapchain(HWND window, viewport_size* window_size, render_con
                     .Height = int_to_ui32(new_window_size.height),
                     .MipLevels = 1,
                     .ArraySize = 1,
-                    .Format = DXGI_FORMAT_D32_FLOAT, // or use DXGI_FORMAT_D32_FLOAT_S8X24_UINT if you need stencil
+                    .Format = DXGI_FORMAT_D24_UNORM_S8_UINT, // or use DXGI_FORMAT_D32_FLOAT_S8X24_UINT if you need stencil
                     .SampleDesc = { 1, 0 },
                     .Usage = D3D11_USAGE_DEFAULT,
                     .BindFlags = D3D11_BIND_DEPTH_STENCIL,
                 };
 
                 // create new depth stencil texture & DepthStencil view
+				D3D11_DEPTH_STENCIL_VIEW_DESC dvd = {};
+				
+					dvd.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+					dvd.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+					dvd.Texture2D.MipSlice = 0;
+				
                 ID3D11Texture2D* depth;
                 rContext->device->CreateTexture2D(&depthDesc, NULL, &depth);
-                rContext->device->CreateDepthStencilView(depth, NULL, &rContext->dsView);
+                rContext->device->CreateDepthStencilView(depth, &dvd, &rContext->dsView);
                 depth->Release();
             }
 
@@ -176,11 +164,14 @@ void render_pipeline_states(render_context* rContext, viewport_size* vpSize){
 		rContext->context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 		UINT stride = sizeof(struct vertex);
 		UINT offset = 0;
-		rContext->context->IASetVertexBuffers(0, 1, &rContext->vbuffer, &stride, &offset);
+		rContext->context->IASetVertexBuffers(0, 1, &rContext->vertex_buffer, &stride, &offset);
 
-		// Vertex Shader
-		rContext->context->VSSetConstantBuffers(0, 1, &rContext->ubuffer);
+		// Vertex Shader 
 		rContext->context->VSSetShader(rContext->vshader, NULL, 0);
+		
+		// Bind buffers
+		ID3D11Buffer* constant_buffers[] = {rContext->frame_buffer, rContext->object_buffer};
+		rContext->context->VSSetConstantBuffers(0, 2, constant_buffers); // 2 buffers for now
 
 		// Rasterizer Stage
 		rContext->context->RSSetViewports(1, &viewport);
@@ -192,7 +183,7 @@ void render_pipeline_states(render_context* rContext, viewport_size* vpSize){
 		rContext->context->PSSetShader(rContext->pshader, NULL, 0);
 
 		// Output Merger
-		rContext->context->OMSetBlendState(rContext->blendState, NULL, ~0U);
+		rContext->context->OMSetBlendState(rContext->blendState, NULL, 0xffffffff);
 		rContext->context->OMSetDepthStencilState(rContext->depthState, 0);
 		rContext->context->OMSetRenderTargets(1, &rContext->rtView, rContext->dsView);
 	};
@@ -209,48 +200,48 @@ void render_reset_frame(render_context* rContext){
 
 // ----------- calls to the gpu
 
-void render_upload_dynamic_vbuffer(render_context* rContext){
+void render_upload_vertex_buffer(render_context* rContext){
 	D3D11_MAPPED_SUBRESOURCE mapped;
 	
-	rContext->context->Map((ID3D11Resource*)rContext->vbuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+	rContext->context->Map((ID3D11Resource*)rContext->vertex_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
 	memcpy(mapped.pData, rContext->vQueue, sizeof(vertex)*rContext->vCount);
-	rContext->context->Unmap((ID3D11Resource*)rContext->vbuffer, 0);
+	rContext->context->Unmap((ID3D11Resource*)rContext->vertex_buffer, 0);
 };
 
-void render_upload_camera_ubuffer(render_context *rContext, camera* rCamera, viewport_size vp){	
+void render_upload_frame_buffer(render_context *rContext, Camera* camera, viewport_size vp){	
 	
 	float width = (float)vp.width;
 	float height = (float)vp.height;
 	
-	mx matrix = game_OrthographicProjection(rCamera, width, height);
+	// since we are using raylib's camera, we're using the library heree
+	mx matrix = GetCameraViewMatrix(camera);
+	mx proj_matrix = GetCameraProjectionMatrix(camera, width / height);
+	
+	mx matrix_scaled = MatrixScale(10, 10, 10);
+	matrix = MatrixMultiply(matrix_scaled, matrix);
+	
+	matrix = MatrixMultiply(matrix, proj_matrix);
+	
+
 	
 	D3D11_MAPPED_SUBRESOURCE mapped;
 	
-	rContext->context->Map(rContext->ubuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+	rContext->context->Map(rContext->frame_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
 	memcpy(mapped.pData, &matrix, sizeof(matrix));
-	rContext->context->Unmap(rContext->ubuffer, 0);
+	rContext->context->Unmap(rContext->frame_buffer, 0);
+};
+
+void render_draw_mesh(render_context* rContext,mesh mesh_data){
+	render_queue_vertex(rContext, mesh_data);
+	render_upload_vertex_buffer(rContext);
+	rContext->context->Draw(rContext->vCount, 0);
 };
 
 // ----------- init stuff
 
-HRESULT render_init_ubuffer(render_context* rContext) {
-	HRESULT hr;
-	
-	// todo: fix this
-	D3D11_BUFFER_DESC desc =
-    {
-        .ByteWidth = sizeof(mx) * 2,
-		.Usage = D3D11_USAGE_DYNAMIC,
-		.BindFlags = D3D11_BIND_CONSTANT_BUFFER,
-		.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE,
-	};
+// --- buffers
 
-    hr = rContext->device->CreateBuffer(&desc, NULL, &rContext->ubuffer); 
-	
-	return hr;
-};
-
-HRESULT render_init_vbuffer(render_context *rContext, int bufferSize) {
+HRESULT render_create_vertex_buffer(render_context *rContext, int bufferSize) {
 	HRESULT hr;
 
 	D3D11_BUFFER_DESC desc =
@@ -262,10 +253,254 @@ HRESULT render_init_vbuffer(render_context *rContext, int bufferSize) {
 	};
 
 	D3D11_SUBRESOURCE_DATA initial = { .pSysMem = rContext->vQueue };
-    hr = rContext->device->CreateBuffer(&desc, NULL, &rContext->vbuffer);
+    hr = rContext->device->CreateBuffer(&desc, NULL, &rContext->vertex_buffer);
 	
 	return hr;
 }
+
+HRESULT render_create_frame_buffer(render_context* rContext) {
+	HRESULT hr;
+	
+	// todo: fix this
+	D3D11_BUFFER_DESC desc =
+    {
+        .ByteWidth = sizeof(mx) * 2,
+		.Usage = D3D11_USAGE_DYNAMIC,
+		.BindFlags = D3D11_BIND_CONSTANT_BUFFER,
+		.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE,
+	};
+
+    hr = rContext->device->CreateBuffer(&desc, NULL, &rContext->frame_buffer); 
+	
+	return hr;
+};
+
+HRESULT render_create_object_buffer(render_context* rContext) {
+	HRESULT hr;
+	
+	// todo: fix this
+	D3D11_BUFFER_DESC desc =
+    {
+        .ByteWidth = sizeof(mx) * 2,
+		.Usage = D3D11_USAGE_DYNAMIC,
+		.BindFlags = D3D11_BIND_CONSTANT_BUFFER,
+		.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE,
+	};
+
+    hr = rContext->device->CreateBuffer(&desc, NULL, &rContext->object_buffer); 
+	
+	return hr;
+};
+
+// --- assets (textures, shaders...)
+
+HRESULT render_load_shaders(render_context* rContext) {
+	HRESULT hr;
+	
+	
+	// IA decs
+	// these must match vertex shader input layout (VS_INPUT in vertex shader source below)
+	D3D11_INPUT_ELEMENT_DESC desc[] =
+	{
+		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, offsetof(vertex, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,    0, offsetof(vertex, uv),       D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(vertex, color),    D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	};
+	
+	char vsLocation[] = "triangle.vs.fxc";
+	char psLocation[] = "triangle.ps.fxc";
+	
+	complete_file vblob = {0};
+	complete_file pblob = {0};
+	
+	io_file_fullread(vsLocation, &vblob);
+	io_file_fullread(psLocation, &pblob);
+	
+	
+	hr = rContext->device->CreateVertexShader(vblob.memory, vblob.size, NULL, &rContext->vshader);
+	hr = rContext->device->CreatePixelShader(pblob.memory, pblob.size, NULL, &rContext->pshader);
+	hr = rContext->device->CreateInputLayout(desc, ARRAYSIZE(desc), vblob.memory, vblob.size, &rContext->layout);
+
+	io_file_fullfree(&vblob);
+	io_file_fullfree(&pblob);
+	
+	return hr;
+};
+
+HRESULT render_init_textures(render_context* rContext) {
+	HRESULT hr;
+	
+	// todo: rewrite all of this (it sucks)
+		
+	// todo: asset pipeline for textures
+		
+	// for testing
+    // unsigned int pixels[] =
+    // {
+        // 0x80000000, 0xffffffff,
+        // 0xffffffff, 0x80000000,
+    // };
+		
+	// open and decode the texture
+	char location[] = "texture.png";
+	complete_file texture_file = {0};
+	complete_img tex = parse_decode_img(location, &texture_file);
+
+    D3D11_TEXTURE2D_DESC desc =
+    {
+        .Width = tex.x,
+        .Height = tex.y,
+        .MipLevels = 1,
+        .ArraySize = 1,
+        .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+        .SampleDesc = { 1, 0 },
+        .Usage = D3D11_USAGE_IMMUTABLE,
+        .BindFlags = D3D11_BIND_SHADER_RESOURCE,
+    };
+
+    D3D11_SUBRESOURCE_DATA data =
+    {
+		.pSysMem = tex.memory,
+		.SysMemPitch = tex.x * tex.channels_in_file,
+    };
+
+    ID3D11Texture2D* texture;
+    hr = rContext->device->CreateTexture2D(&desc, &data, &texture);
+    hr = rContext->device->CreateShaderResourceView((ID3D11Resource*)texture, NULL, &rContext->textureView);
+    texture->Release();
+	io_file_fullfree(&texture_file);
+	
+	return hr;
+};
+
+// --- states
+
+HRESULT render_init_sampler(render_context* rContext) {
+	HRESULT hr;
+	
+	/* doc:
+	https://learn.microsoft.com/en-us/windows/win32/api/d3d11/nf-d3d11-id3d11device-createsamplerstate
+	https://learn.microsoft.com/en-us/windows/win32/api/d3d11/ns-d3d11-d3d11_sampler_desc */
+	
+    D3D11_SAMPLER_DESC desc =
+    {
+		.Filter = D3D11_FILTER_MIN_MAG_POINT_MIP_LINEAR,
+		.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP,
+		.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP,
+		.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP,
+		.MipLODBias = 0,
+		.MaxAnisotropy = 1,
+		.MinLOD = 0,
+		.MaxLOD = D3D11_FLOAT32_MAX,
+	};
+
+    hr = rContext->device->CreateSamplerState(&desc, &rContext->sampler);
+	
+	return hr;
+};
+
+HRESULT render_init_ds(render_context* rContext){
+	HRESULT hr;
+	
+	// todo: disabled depth & stencil test for now, will be enabled later
+	D3D11_DEPTH_STENCIL_DESC desc =
+	{
+		.DepthEnable = TRUE,
+		.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL,
+		.DepthFunc = D3D11_COMPARISON_LESS,
+		.StencilEnable = TRUE,
+		.StencilReadMask = D3D11_DEFAULT_STENCIL_READ_MASK,
+		.StencilWriteMask = D3D11_DEFAULT_STENCIL_WRITE_MASK,
+		
+		// Front face
+		
+		// .BackFace = ...
+    };
+	desc.FrontFace.StencilFailOp = D3D11_STENCIL_OP_KEEP;
+    desc.FrontFace.StencilDepthFailOp = D3D11_STENCIL_OP_INCR;
+    desc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
+    desc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
+	
+	desc.BackFace.StencilFailOp = D3D11_STENCIL_OP_KEEP;
+    desc.BackFace.StencilDepthFailOp = D3D11_STENCIL_OP_DECR;
+    desc.BackFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
+    desc.BackFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
+	
+	
+	
+	hr = rContext->device->CreateDepthStencilState(&desc, &rContext->depthState);
+	
+	return hr;
+};
+
+HRESULT render_init_rasterizer(render_context* rContext){
+	HRESULT hr;
+	
+	// todo: disabled culling for now, check if we enable it later
+	// more info: https://github.com/ssloy/tinyrenderer/wiki/Lesson-2:-Triangle-rasterization-and-back-face-culling
+	/* doc:
+	https://learn.microsoft.com/en-us/windows/win32/api/d3d11/ns-d3d11-d3d11_rasterizer_desc
+	(concept) https://www.khronos.org/opengl/wiki/Face_Culling */
+		
+	D3D11_RASTERIZER_DESC desc =
+    {
+		.FillMode = D3D11_FILL_SOLID,
+		.CullMode = D3D11_CULL_BACK,
+		.FrontCounterClockwise = TRUE,
+		.DepthClipEnable = TRUE,
+	};
+    hr = rContext->device->CreateRasterizerState(&desc, &rContext->rasterizerState);
+	
+	return hr;
+};
+
+// --- instances
+
+HRESULT render_init_device(render_context* rContext) {
+	HRESULT hr;
+	
+	{
+	UINT flags = 0;
+		#ifdef NDEBUG 
+			// this enables VERY USEFUL debug messages in debugger output
+			flags |= D3D11_CREATE_DEVICE_DEBUG;
+		#endif 
+	
+	
+		D3D_FEATURE_LEVEL levels[] = { D3D_FEATURE_LEVEL_11_0 };
+        hr = D3D11CreateDevice(
+            NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, flags, levels, ARRAYSIZE(levels),
+            D3D11_SDK_VERSION, &rContext->device, NULL, &rContext->context);
+
+        // We could try D3D_DRIVER_TYPE_WARP driver type which enables software rendering
+        // (could be useful on broken drivers or remote desktop situations)
+        AssertHR(hr);
+    }
+	
+	#ifdef NDEBUG
+		{
+			// for debug builds enable VERY USEFUL debug break on API errors
+			ID3D11InfoQueue* info;
+			rContext->device->QueryInterface(IID_ID3D11InfoQueue, (void**)&info);
+			info->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_CORRUPTION, TRUE);
+			info->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_ERROR, TRUE);
+			info->Release();
+		}
+
+		{
+			// enable debug break for DXGI too
+			IDXGIInfoQueue* dxgiInfo;
+			hr = DXGIGetDebugInterface1(0, IID_IDXGIInfoQueue, (void**)&dxgiInfo);
+			AssertHR(hr);
+			dxgiInfo->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_CORRUPTION, TRUE);
+			dxgiInfo->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_ERROR, TRUE);
+			dxgiInfo->Release();
+		}
+		// debugger will break on errors
+	#endif
+	
+	return hr;
+};
 
 HRESULT render_init_swapchain(render_context* rContext, HWND window) {
 	HRESULT hr;
@@ -338,193 +573,9 @@ HRESULT render_init_swapchain(render_context* rContext, HWND window) {
 	return hr;
 };
 
-HRESULT render_init_shaders(render_context* rContext) {
-	HRESULT hr;
-	
-	// these must match vertex shader input layout (VS_INPUT in vertex shader source below)
-	D3D11_INPUT_ELEMENT_DESC desc[] =
-	{
-		{ "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT,    0, offsetof(struct vertex, position), D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,    0, offsetof(struct vertex, uv),       D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		{ "COLOR",    0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(struct vertex, color),    D3D11_INPUT_PER_VERTEX_DATA, 0 },
-	};
-	char vsLocation[] = "triangle.vs.fxc";
-	char psLocation[] = "triangle.ps.fxc";
-	
-	complete_file vblob = {0};
-	complete_file pblob = {0};
-	
-	io_file_fullread(vsLocation, &vblob);
-	io_file_fullread(psLocation, &pblob);
-	
-	
-	hr = rContext->device->CreateVertexShader(vblob.memory, vblob.size, NULL, &rContext->vshader);
-	hr = rContext->device->CreatePixelShader(pblob.memory, pblob.size, NULL, &rContext->pshader);
-	hr = rContext->device->CreateInputLayout(desc, ARRAYSIZE(desc), vblob.memory, vblob.size, &rContext->layout);
 
-	io_file_fullfree(&vblob);
-	io_file_fullfree(&pblob);
-	
-	return hr;
-};
-
-HRESULT render_init_textures(render_context* rContext) {
-	HRESULT hr;
-	
-	// todo: rewrite all of this (it sucks)
-		
-	// todo: asset pipeline for textures
-		
-	// for testing
-    // unsigned int pixels[] =
-    // {
-        // 0x80000000, 0xffffffff,
-        // 0xffffffff, 0x80000000,
-    // };
-		
-	// open and decode the texture
-	char location[] = "texture.png";
-	complete_file texture_file = {0};
-	complete_img tex = parse_decode_img(location, &texture_file);
-
-    D3D11_TEXTURE2D_DESC desc =
-    {
-        .Width = tex.x,
-        .Height = tex.y,
-        .MipLevels = 1,
-        .ArraySize = 1,
-        .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
-        .SampleDesc = { 1, 0 },
-        .Usage = D3D11_USAGE_IMMUTABLE,
-        .BindFlags = D3D11_BIND_SHADER_RESOURCE,
-    };
-
-    D3D11_SUBRESOURCE_DATA data =
-    {
-		.pSysMem = tex.memory,
-		.SysMemPitch = tex.x * tex.channels_in_file,
-    };
-
-    ID3D11Texture2D* texture;
-    hr = rContext->device->CreateTexture2D(&desc, &data, &texture);
-    hr = rContext->device->CreateShaderResourceView((ID3D11Resource*)texture, NULL, &rContext->textureView);
-    texture->Release();
-	io_file_fullfree(&texture_file);
-	
-	return hr;
-};
-
-HRESULT render_init_sampler(render_context* rContext) {
-	HRESULT hr;
-	
-	/* doc:
-	https://learn.microsoft.com/en-us/windows/win32/api/d3d11/nf-d3d11-id3d11device-createsamplerstate
-	https://learn.microsoft.com/en-us/windows/win32/api/d3d11/ns-d3d11-d3d11_sampler_desc */
-	
-    D3D11_SAMPLER_DESC desc =
-    {
-		.Filter = D3D11_FILTER_MIN_MAG_POINT_MIP_LINEAR,
-		.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP,
-		.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP,
-		.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP,
-		.MipLODBias = 0,
-		.MaxAnisotropy = 1,
-		.MinLOD = 0,
-		.MaxLOD = D3D11_FLOAT32_MAX,
-	};
-
-    hr = rContext->device->CreateSamplerState(&desc, &rContext->sampler);
-	
-	return hr;
-};
-
-HRESULT render_init_ds(render_context* rContext){
-	HRESULT hr;
-	
-	// todo: disabled depth & stencil test for now, will be enabled later
-	D3D11_DEPTH_STENCIL_DESC desc =
-	{
-		.DepthEnable = FALSE,
-		.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL,
-		.DepthFunc = D3D11_COMPARISON_LESS,
-		.StencilEnable = FALSE,
-		.StencilReadMask = D3D11_DEFAULT_STENCIL_READ_MASK,
-		.StencilWriteMask = D3D11_DEFAULT_STENCIL_WRITE_MASK,
-		// .FrontFace = ... 
-		// .BackFace = ...
-    };
-	hr = rContext->device->CreateDepthStencilState(&desc, &rContext->depthState);
-	
-	return hr;
-};
-
-HRESULT render_init_rasterizer(render_context* rContext){
-	HRESULT hr;
-	
-	// todo: disabled culling for now, check if we enable it later
-	// more info: https://github.com/ssloy/tinyrenderer/wiki/Lesson-2:-Triangle-rasterization-and-back-face-culling
-	/* doc:
-	https://learn.microsoft.com/en-us/windows/win32/api/d3d11/ns-d3d11-d3d11_rasterizer_desc
-	(concept) https://www.khronos.org/opengl/wiki/Face_Culling */
-		
-	D3D11_RASTERIZER_DESC desc =
-    {
-		.FillMode = D3D11_FILL_SOLID,
-		.CullMode = D3D11_CULL_NONE,
-		.DepthClipEnable = TRUE,
-	};
-    hr = rContext->device->CreateRasterizerState(&desc, &rContext->rasterizerState);
-	
-	return hr;
-};
-
-HRESULT render_init_device(render_context* rContext) {
-	HRESULT hr;
-	
-	{
-	UINT flags = 0;
-		#ifdef NDEBUG 
-			// this enables VERY USEFUL debug messages in debugger output
-			flags |= D3D11_CREATE_DEVICE_DEBUG;
-		#endif 
-	
-	
-		D3D_FEATURE_LEVEL levels[] = { D3D_FEATURE_LEVEL_11_0 };
-        hr = D3D11CreateDevice(
-            NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, flags, levels, ARRAYSIZE(levels),
-            D3D11_SDK_VERSION, &rContext->device, NULL, &rContext->context);
-
-        // We could try D3D_DRIVER_TYPE_WARP driver type which enables software rendering
-        // (could be useful on broken drivers or remote desktop situations)
-        AssertHR(hr);
-    }
-	
-	#ifdef NDEBUG
-		{
-			// for debug builds enable VERY USEFUL debug break on API errors
-			ID3D11InfoQueue* info;
-			rContext->device->QueryInterface(IID_ID3D11InfoQueue, (void**)&info);
-			info->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_CORRUPTION, TRUE);
-			info->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_ERROR, TRUE);
-			info->Release();
-		}
-
-		{
-			// enable debug break for DXGI too
-			IDXGIInfoQueue* dxgiInfo;
-			hr = DXGIGetDebugInterface1(0, IID_IDXGIInfoQueue, (void**)&dxgiInfo);
-			AssertHR(hr);
-			dxgiInfo->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_CORRUPTION, TRUE);
-			dxgiInfo->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_ERROR, TRUE);
-			dxgiInfo->Release();
-		}
-		// debugger will break on errors
-	#endif
-	
-	return hr;
-};
-
-HRESULT render_init_d3d11(HWND window, render_context* rContext, camera* game_camera) {
+// --- main call for init
+HRESULT render_init_d3d11(HWND window, render_context* rContext) {
 	/* doc:
 	https://learn.microsoft.com/en-us/windows/win32/api/d3d11/nf-d3d11-d3d11createdevice */
 	
@@ -537,14 +588,9 @@ HRESULT render_init_d3d11(HWND window, render_context* rContext, camera* game_ca
 	hr = render_init_swapchain(rContext, window);
 	
 	// init needed buffers 
-	hr = render_init_ubuffer(rContext);	
-	
-	// init shaders
-	hr = render_init_shaders(rContext);
-	hr = render_init_vbuffer(rContext, 2048);
-	
-	// textures
-	hr = render_init_textures(rContext);
+	hr = render_create_vertex_buffer(rContext, 32768);
+	hr = render_create_frame_buffer(rContext);
+	hr = render_create_object_buffer(rContext);
 	
 	// sampler
 	hr = render_init_sampler(rContext);
@@ -555,6 +601,14 @@ HRESULT render_init_d3d11(HWND window, render_context* rContext, camera* game_ca
 	// depth stencil
 	hr = render_init_ds(rContext);
 	
+	// init shaders
+	hr = render_load_shaders(rContext);
+	
+	// textures
+	hr = render_init_textures(rContext);
+	
+	
+	
 	// set rt/ds view on rcontext (to zero)
 	// more info: https://learn.microsoft.com/en-us/windows/win32/api/d3d11/nn-d3d11-id3d11view
     rContext->rtView = NULL;
@@ -562,5 +616,7 @@ HRESULT render_init_d3d11(HWND window, render_context* rContext, camera* game_ca
 
 	return hr;
 }
+
+
 
 #endif /* _RENDERH_ */
