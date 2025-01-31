@@ -185,7 +185,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previnstance, LPSTR cmdline, in
     {
 		// update states here
 		f64 new_time = platform_get_time(platformClockSpeed);
-		window_size = platform_get_window_size(window);
+		// window_size = platform_get_window_size(window);
 	
         // windows api message processing
         MSG msg;
@@ -253,7 +253,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previnstance, LPSTR cmdline, in
         }
 
         // change to FALSE to disable vsync
-        BOOL vsync = TRUE;
+        BOOL vsync = FALSE;
         hr = rContext.swapChain->Present(vsync ? 1 : 0, 0);
 		
 		// debug code
