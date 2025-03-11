@@ -4,7 +4,7 @@
 @set OUT_DIR=build
 @set LIBS=user32.lib gdi32.lib
 @set INCLUDES=/Isrc\libs\imgui /Isrc\libs
-@set ARGS=/F 4000000 /std:c++20 /DNDEBUG=1 
+@set ARGS=/F 4000000 /std:c++20 /DNDEBUG=1 /Od
 
 IF NOT EXIST %OUT_DIR%\ MKDIR %OUT_DIR% 
 

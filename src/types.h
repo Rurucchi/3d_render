@@ -56,4 +56,14 @@ float lerp(float v0, float v1, float t) {
   return v0 + t * (v1 - v0);
 }
 
+float clamp(float value, float min, float max) {
+    if (value < min) {
+        return min;
+    } else if (value > max) {
+        return max;
+    } else {
+        return value;
+    }
+}
+
 #endif /* _TYPESH_ */

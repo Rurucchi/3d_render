@@ -27,5 +27,4 @@
         CAMERA_THIRD_PERSON     // Camera third person
     } CameraMode;
 	
-	
 #endif /* _RCAMERAEXH_ */
