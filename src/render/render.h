@@ -33,8 +33,15 @@ struct vertex
 struct mesh
 {
 	v3 pos;
-	ui32 vertice_count;
+	ui32 vertex_count;
 	vertex* vertices;
+	ui16 index_count;
+	ui16* indices;
+};
+
+struct light_source {
+	v3 pos;
+	f32 intensity;
 };
 
 // this will change depending on what we need
@@ -62,8 +69,11 @@ struct render_context {
 	
 	// buffers
 	int vCount;
+	int indexCount;
 	vertex vQueue[16384];
+	ui32 indexQueue[16384];
 	ID3D11Buffer* vertex_buffer; // vertex buffer
+	ID3D11Buffer* index_buffer; // index buffer
 	ID3D11Buffer* frame_buffer; // buffer static to the frame
 	ID3D11Buffer* object_buffer; // updated for each object drawn (inefficient)
 	
@@ -76,11 +86,19 @@ struct render_context {
 // ----------- dx pipeline stuff
 
 void render_queue_vertex(render_context* rContext, mesh mesh_data) {
-	for(int i=0; i < mesh_data.vertice_count; i++) {
+	for(int i=0; i < mesh_data.index_count; i++) {
+		rContext->indexQueue[rContext->indexCount] = mesh_data.indices[i];
+		rContext->indexCount++;
+	};
+};
+
+void render_queue_index(render_context* rContext, mesh mesh_data) {
+	for(int i=0; i < mesh_data.vertex_count; i++) {
 		rContext->vQueue[rContext->vCount] = mesh_data.vertices[i];
 		rContext->vCount++;
 	};
 };
+
 
 void render_resize_swapchain(HWND window, viewport_size* window_size, render_context* rContext) {
 	
@@ -164,7 +182,12 @@ void render_pipeline_states(render_context* rContext, viewport_size* vpSize){
 		rContext->context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 		UINT stride = sizeof(struct vertex);
 		UINT offset = 0;
+		
+		// Vertex Buffer
 		rContext->context->IASetVertexBuffers(0, 1, &rContext->vertex_buffer, &stride, &offset);
+
+		// Index Buffer
+		rContext->context->IASetIndexBuffer(rContext->index_buffer, DXGI_FORMAT_R32_UINT, 0);
 
 		// Vertex Shader 
 		rContext->context->VSSetShader(rContext->vshader, NULL, 0);
@@ -196,6 +219,7 @@ void render_clear_screen(render_context* rContext, f32 color[4]){
 
 void render_reset_frame(render_context* rContext){
 	rContext->vCount = 0;
+	rContext->indexCount = 0;
 };
 
 // ----------- calls to the gpu
@@ -206,6 +230,15 @@ void render_upload_vertex_buffer(render_context* rContext){
 	rContext->context->Map((ID3D11Resource*)rContext->vertex_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
 	memcpy(mapped.pData, rContext->vQueue, sizeof(vertex)*rContext->vCount);
 	rContext->context->Unmap((ID3D11Resource*)rContext->vertex_buffer, 0);
+};
+
+
+void render_upload_index_buffer(render_context* rContext){
+	D3D11_MAPPED_SUBRESOURCE mapped;
+	
+	rContext->context->Map((ID3D11Resource*)rContext->index_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+	memcpy(mapped.pData, rContext->indexQueue, sizeof(ui32)*rContext->indexCount);
+	rContext->context->Unmap((ID3D11Resource*)rContext->index_buffer, 0);
 };
 
 void render_upload_frame_buffer(render_context *rContext, Camera* camera, viewport_size vp){	
@@ -233,27 +266,39 @@ void render_upload_frame_buffer(render_context *rContext, Camera* camera, viewpo
 
 void render_draw_mesh(render_context* rContext,mesh mesh_data){
 	render_queue_vertex(rContext, mesh_data);
+	render_queue_index(rContext, mesh_data);
+	render_upload_index_buffer(rContext);
 	render_upload_vertex_buffer(rContext);
-	rContext->context->Draw(rContext->vCount, 0);
+	rContext->context->DrawIndexed(rContext->indexCount, 0, 0);
 };
 
 // ----------- init stuff
 
 // --- buffers
 
-HRESULT render_create_vertex_buffer(render_context *rContext, int bufferSize) {
+HRESULT render_create_mesh_buffer(render_context *rContext, int vertex_buffer_size, int index_buffer_size) {
 	HRESULT hr;
 
-	D3D11_BUFFER_DESC desc =
+	D3D11_BUFFER_DESC vertex_desc =
     {
-        .ByteWidth = sizeof(vertex) * bufferSize,
+        .ByteWidth = sizeof(vertex) * vertex_buffer_size,
 		.Usage = D3D11_USAGE_DYNAMIC,
 		.BindFlags = D3D11_BIND_VERTEX_BUFFER,
 		.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE,
 	};
+	
+	
+	D3D11_BUFFER_DESC index_desc =
+    {
+        .ByteWidth = sizeof(ui16) * index_buffer_size,
+		.Usage = D3D11_USAGE_DYNAMIC,
+		.BindFlags = D3D11_BIND_INDEX_BUFFER,
+		.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE,
+	};
 
 	D3D11_SUBRESOURCE_DATA initial = { .pSysMem = rContext->vQueue };
-    hr = rContext->device->CreateBuffer(&desc, NULL, &rContext->vertex_buffer);
+    hr = rContext->device->CreateBuffer(&vertex_desc, NULL, &rContext->vertex_buffer);
+	hr = rContext->device->CreateBuffer(&index_desc, NULL, &rContext->index_buffer);
 	
 	return hr;
 }
@@ -588,7 +633,7 @@ HRESULT render_init_d3d11(HWND window, render_context* rContext) {
 	hr = render_init_swapchain(rContext, window);
 	
 	// init needed buffers 
-	hr = render_create_vertex_buffer(rContext, 32768);
+	hr = render_create_mesh_buffer(rContext, 16384, 16384);
 	hr = render_create_frame_buffer(rContext);
 	hr = render_create_object_buffer(rContext);
 	
